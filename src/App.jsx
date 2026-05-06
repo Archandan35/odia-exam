@@ -17,98 +17,130 @@ import { auth, db } from "./firebase";
 
 export default function App() {
 
+  // AUTH
   const [user, setUser] = useState(null);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-
-  const [questions, setQuestions] = useState([]);
-
-  const [examQuestions, setExamQuestions] = useState([]);
-
-  const [answers, setAnswers] = useState({});
-
-  const [page, setPage] = useState("dashboard");
-
-  const [result, setResult] = useState(null);
+  const [role, setRole] = useState("student");
 
   const [loading, setLoading] = useState(true);
 
-  // ADMIN STATES
-  const [role, setRole] = useState("student");
+  // LOGIN
+  const [name, setName] = useState("");
 
-  const [newQuestion, setNewQuestion] = useState("");
+  const [email, setEmail] = useState("");
 
-  const [newOptions, setNewOptions] = useState([
-    "",
-    "",
-    "",
-    ""
-  ]);
+  const [password, setPassword] = useState("");
 
-  const [correctAnswer, setCorrectAnswer] = useState(0);
+  const [selectedRole, setSelectedRole] =
+    useState("student");
 
-  const [results, setResults] = useState([]);
+  // QUESTIONS
+  const [questions, setQuestions] =
+    useState([]);
 
-  // AUTH STATE
+  const [newQuestion, setNewQuestion] =
+    useState("");
+
+  const [newOptions, setNewOptions] =
+    useState(["", "", "", ""]);
+
+  const [correctAnswer, setCorrectAnswer] =
+    useState(0);
+
+  // EXAM
+  const [page, setPage] =
+    useState("dashboard");
+
+  const [examQuestions, setExamQuestions] =
+    useState([]);
+
+  const [answers, setAnswers] =
+    useState({});
+
+  const [result, setResult] =
+    useState(null);
+
+  // RESULTS
+  const [results, setResults] =
+    useState([]);
+
+  // USERS
+  const [students, setStudents] =
+    useState([]);
+
+  // AUTH CHECK
   useEffect(() => {
 
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        async (u) => {
 
-      if (u) {
+          if (u) {
 
-        setUser(u);
+            setUser(u);
 
-        await loadQuestions();
+            await loadQuestions();
 
-        const snap = await getDocs(
-          collection(db, "users")
-        );
+            await loadUserRole(u.email);
 
-        snap.forEach((doc) => {
+          } else {
 
-          const data = doc.data();
+            setUser(null);
 
-          if (data.email === u.email) {
-            setRole(data.role || "student");
           }
 
-        });
+          setLoading(false);
 
-      } else {
-
-        setUser(null);
-
-      }
-
-      setLoading(false);
-
-    });
+        }
+      );
 
     return () => unsubscribe();
 
   }, []);
+
+  // LOAD USER ROLE
+  async function loadUserRole(email) {
+
+    const snap = await getDocs(
+      collection(db, "users")
+    );
+
+    snap.forEach((doc) => {
+
+      const data = doc.data();
+
+      if (data.email === email) {
+
+        setRole(data.role || "student");
+
+      }
+
+    });
+  }
 
   // LOAD QUESTIONS
   async function loadQuestions() {
 
     try {
 
-      const snapshot = await getDocs(
-        collection(db, "questions")
-      );
+      const snapshot =
+        await getDocs(
+          collection(db, "questions")
+        );
 
-      const data = [];
+      const arr = [];
 
       snapshot.forEach((doc) => {
-        data.push({
+
+        arr.push({
           id: doc.id,
           ...doc.data(),
         });
+
       });
 
-      setQuestions(data);
+      setQuestions(arr);
 
     } catch (error) {
 
@@ -120,9 +152,16 @@ export default function App() {
   // SIGNUP
   async function signup() {
 
-    if (!email || !password || !name) {
+    if (
+      !name ||
+      !email ||
+      !password
+    ) {
+
       alert("Fill all fields");
+
       return;
+
     }
 
     try {
@@ -134,12 +173,15 @@ export default function App() {
           password
         );
 
-      await addDoc(collection(db, "users"), {
-        uid: res.user.uid,
-        name,
-        email,
-        role: "student",
-      });
+      await addDoc(
+        collection(db, "users"),
+        {
+          uid: res.user.uid,
+          name,
+          email,
+          role: selectedRole,
+        }
+      );
 
       alert("Signup successful");
 
@@ -152,11 +194,6 @@ export default function App() {
 
   // LOGIN
   async function login() {
-
-    if (!email || !password) {
-      alert("Enter email/password");
-      return;
-    }
 
     try {
 
@@ -180,34 +217,15 @@ export default function App() {
 
   }
 
-  // START EXAM
-  function startExam(count) {
-
-    if (questions.length === 0) {
-
-      alert("No questions found");
-
-      return;
-
-    }
-
-    const shuffled = [...questions]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, count);
-
-    setExamQuestions(shuffled);
-
-    setAnswers({});
-
-    setPage("exam");
-  }
-
-  // ADMIN ADD QUESTION
+  // ADD QUESTION
   async function addQuestion() {
 
-    if (!newQuestion) {
+    if (
+      !newQuestion ||
+      newOptions.some((o) => !o)
+    ) {
 
-      alert("Enter question");
+      alert("Fill all question fields");
 
       return;
 
@@ -215,19 +233,17 @@ export default function App() {
 
     try {
 
-      await addDoc(collection(db, "questions"), {
+      await addDoc(
+        collection(db, "questions"),
+        {
+          question: newQuestion,
+          options: newOptions,
+          answer: Number(correctAnswer),
+          subject: "General",
+        }
+      );
 
-        question: newQuestion,
-
-        options: newOptions,
-
-        answer: Number(correctAnswer),
-
-        subject: "General"
-
-      });
-
-      alert("Question added");
+      alert("Question Added");
 
       setNewQuestion("");
 
@@ -252,27 +268,70 @@ export default function App() {
   // LOAD RESULTS
   async function loadResults() {
 
-    try {
-
-      const snapshot = await getDocs(
+    const snapshot =
+      await getDocs(
         collection(db, "results")
       );
 
-      const arr = [];
+    const arr = [];
 
-      snapshot.forEach((doc) => {
+    snapshot.forEach((doc) => {
 
-        arr.push(doc.data());
+      arr.push(doc.data());
 
-      });
+    });
 
-      setResults(arr);
+    setResults(arr);
+  }
 
-    } catch (error) {
+  // LOAD STUDENTS
+  async function loadStudents() {
 
-      alert(error.message);
+    const snapshot =
+      await getDocs(
+        collection(db, "users")
+      );
+
+    const arr = [];
+
+    snapshot.forEach((doc) => {
+
+      const data = doc.data();
+
+      if (data.role === "student") {
+
+        arr.push(data);
+
+      }
+
+    });
+
+    setStudents(arr);
+  }
+
+  // START EXAM
+  function startExam(count) {
+
+    if (questions.length === 0) {
+
+      alert("No questions found");
+
+      return;
 
     }
+
+    const shuffled =
+      [...questions]
+        .sort(() =>
+          Math.random() - 0.5
+        )
+        .slice(0, count);
+
+    setExamQuestions(shuffled);
+
+    setAnswers({});
+
+    setPage("exam");
   }
 
   // SUBMIT EXAM
@@ -282,7 +341,9 @@ export default function App() {
 
     examQuestions.forEach((q, i) => {
 
-      if (answers[i] === q.answer) {
+      if (
+        answers[i] === q.answer
+      ) {
 
         correct++;
 
@@ -290,9 +351,13 @@ export default function App() {
 
     });
 
-    const score = Math.round(
-      (correct / examQuestions.length) * 100
-    );
+    const score =
+      Math.round(
+        (
+          correct /
+          examQuestions.length
+        ) * 100
+      );
 
     const resultData = {
 
@@ -304,28 +369,22 @@ export default function App() {
 
       correct,
 
-      total: examQuestions.length,
+      total:
+        examQuestions.length,
 
-      createdAt: new Date().toISOString(),
+      createdAt:
+        new Date().toISOString(),
 
     };
 
-    try {
+    await addDoc(
+      collection(db, "results"),
+      resultData
+    );
 
-      await addDoc(
-        collection(db, "results"),
-        resultData
-      );
+    setResult(resultData);
 
-      setResult(resultData);
-
-      setPage("result");
-
-    } catch (error) {
-
-      alert(error.message);
-
-    }
+    setPage("result");
   }
 
   // LOADING
@@ -361,11 +420,20 @@ export default function App() {
             background: "white",
             padding: 30,
             borderRadius: 12,
-            width: 320,
+            width: 350,
+            boxShadow:
+              "0 5px 20px rgba(0,0,0,0.1)",
           }}
         >
 
-          <h1>Odia Exam Portal</h1>
+          <h1
+            style={{
+              textAlign: "center",
+              marginBottom: 25,
+            }}
+          >
+            Odia Exam Portal
+          </h1>
 
           <input
             placeholder="Full Name"
@@ -373,10 +441,12 @@ export default function App() {
             onChange={(e) =>
               setName(e.target.value)
             }
+            style={{
+              width: "100%",
+              marginBottom: 15,
+              padding: 12,
+            }}
           />
-
-          <br />
-          <br />
 
           <input
             placeholder="Email"
@@ -384,10 +454,12 @@ export default function App() {
             onChange={(e) =>
               setEmail(e.target.value)
             }
+            style={{
+              width: "100%",
+              marginBottom: 15,
+              padding: 12,
+            }}
           />
-
-          <br />
-          <br />
 
           <input
             type="password"
@@ -396,18 +468,63 @@ export default function App() {
             onChange={(e) =>
               setPassword(e.target.value)
             }
+            style={{
+              width: "100%",
+              marginBottom: 15,
+              padding: 12,
+            }}
           />
 
-          <br />
-          <br />
+          <select
+            value={selectedRole}
+            onChange={(e) =>
+              setSelectedRole(
+                e.target.value
+              )
+            }
+            style={{
+              width: "100%",
+              marginBottom: 20,
+              padding: 12,
+            }}
+          >
 
-          <button onClick={signup}>
-            Signup
-          </button>
+            <option value="student">
+              Student
+            </option>
 
-          <button onClick={login}>
-            Login
-          </button>
+            <option value="admin">
+              Admin
+            </option>
+
+          </select>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+            }}
+          >
+
+            <button
+              onClick={signup}
+              style={{
+                flex: 1,
+              }}
+            >
+              Signup
+            </button>
+
+            <button
+              onClick={login}
+              style={{
+                flex: 1,
+              }}
+            >
+              Login
+            </button>
+
+          </div>
 
         </div>
 
@@ -420,7 +537,7 @@ export default function App() {
 
     return (
 
-      <div style={{ padding: 20 }}>
+      <div style={{ padding: 30 }}>
 
         <h1>Mock Exam</h1>
 
@@ -431,8 +548,8 @@ export default function App() {
             style={{
               background: "white",
               padding: 20,
-              marginBottom: 20,
               borderRadius: 10,
+              marginBottom: 20,
             }}
           >
 
@@ -448,8 +565,9 @@ export default function App() {
 
                   <input
                     type="radio"
-                    name={`q-${i}`}
-                    checked={answers[i] === j}
+                    checked={
+                      answers[i] === j
+                    }
                     onChange={() =>
                       setAnswers({
                         ...answers,
@@ -468,7 +586,9 @@ export default function App() {
           </div>
         ))}
 
-        <button onClick={submitExam}>
+        <button
+          onClick={submitExam}
+        >
           Submit Exam
         </button>
 
@@ -491,7 +611,8 @@ export default function App() {
         <h1>Exam Result</h1>
 
         <h2>
-          Score: {result.score}%
+          Score:
+          {result.score}%
         </h2>
 
         <p>
@@ -523,7 +644,7 @@ export default function App() {
         <h1>Admin Dashboard</h1>
 
         <p>
-          Logged in as admin:
+          Logged in as:
           {user.email}
         </p>
 
@@ -535,35 +656,41 @@ export default function App() {
           placeholder="Question"
           value={newQuestion}
           onChange={(e) =>
-            setNewQuestion(e.target.value)
+            setNewQuestion(
+              e.target.value
+            )
           }
+          style={{
+            width: "100%",
+            padding: 10,
+            marginBottom: 10,
+          }}
         />
-
-        <br />
-        <br />
 
         {newOptions.map((opt, i) => (
 
-          <div key={i}>
+          <input
+            key={i}
+            placeholder={`Option ${i + 1}`}
+            value={opt}
+            onChange={(e) => {
 
-            <input
-              placeholder={`Option ${i + 1}`}
-              value={opt}
-              onChange={(e) => {
+              const copy =
+                [...newOptions];
 
-                const copy = [...newOptions];
+              copy[i] =
+                e.target.value;
 
-                copy[i] = e.target.value;
+              setNewOptions(copy);
 
-                setNewOptions(copy);
+            }}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginBottom: 10,
+            }}
+          />
 
-              }}
-            />
-
-            <br />
-            <br />
-
-          </div>
         ))}
 
         <input
@@ -571,14 +698,20 @@ export default function App() {
           placeholder="Correct Answer Index"
           value={correctAnswer}
           onChange={(e) =>
-            setCorrectAnswer(e.target.value)
+            setCorrectAnswer(
+              e.target.value
+            )
           }
+          style={{
+            width: "100%",
+            padding: 10,
+            marginBottom: 15,
+          }}
         />
 
-        <br />
-        <br />
-
-        <button onClick={addQuestion}>
+        <button
+          onClick={addQuestion}
+        >
           Add Question
         </button>
 
@@ -589,11 +722,19 @@ export default function App() {
           {questions.length}
         </h2>
 
-        <button onClick={loadResults}>
+        <button
+          onClick={loadResults}
+        >
           Load Results
         </button>
 
-        <h2>Student Results</h2>
+        <button
+          onClick={loadStudents}
+        >
+          View Students
+        </button>
+
+        <h2>Results</h2>
 
         {results.map((r, i) => (
 
@@ -607,15 +748,48 @@ export default function App() {
             }}
           >
 
-            <p>Email: {r.email}</p>
+            <p>
+              Email:
+              {r.email}
+            </p>
 
-            <p>Score: {r.score}%</p>
+            <p>
+              Score:
+              {r.score}%
+            </p>
 
             <p>
               Correct:
               {r.correct}
               /
               {r.total}
+            </p>
+
+          </div>
+        ))}
+
+        <h2>Students</h2>
+
+        {students.map((s, i) => (
+
+          <div
+            key={i}
+            style={{
+              background: "white",
+              padding: 15,
+              marginBottom: 10,
+              borderRadius: 8,
+            }}
+          >
+
+            <p>
+              Name:
+              {s.name}
+            </p>
+
+            <p>
+              Email:
+              {s.email}
             </p>
 
           </div>
@@ -646,25 +820,33 @@ export default function App() {
       <h3>Select Mock Test</h3>
 
       <button
-        onClick={() => startExam(10)}
+        onClick={() =>
+          startExam(10)
+        }
       >
         10 Questions
       </button>
 
       <button
-        onClick={() => startExam(15)}
+        onClick={() =>
+          startExam(15)
+        }
       >
         15 Questions
       </button>
 
       <button
-        onClick={() => startExam(20)}
+        onClick={() =>
+          startExam(20)
+        }
       >
         20 Questions
       </button>
 
       <button
-        onClick={() => startExam(50)}
+        onClick={() =>
+          startExam(50)
+        }
       >
         50 Questions
       </button>
