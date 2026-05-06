@@ -11,20 +11,23 @@ import {
   collection,
   addDoc,
   getDocs,
+  deleteDoc,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 
 import { auth, db } from "./firebase";
 
 export default function App() {
 
-  // AUTH
+  const [loading, setLoading] = useState(true);
+
+  const [darkMode, setDarkMode] = useState(false);
+
   const [user, setUser] = useState(null);
 
   const [role, setRole] = useState("student");
 
-  const [loading, setLoading] = useState(true);
-
-  // LOGIN
   const [name, setName] = useState("");
 
   const [email, setEmail] = useState("");
@@ -34,9 +37,20 @@ export default function App() {
   const [selectedRole, setSelectedRole] =
     useState("student");
 
-  // QUESTIONS
   const [questions, setQuestions] =
     useState([]);
+
+  const [results, setResults] =
+    useState([]);
+
+  const [students, setStudents] =
+    useState([]);
+
+  const [leaderboard, setLeaderboard] =
+    useState([]);
+
+  const [page, setPage] =
+    useState("dashboard");
 
   const [newQuestion, setNewQuestion] =
     useState("");
@@ -47,9 +61,8 @@ export default function App() {
   const [correctAnswer, setCorrectAnswer] =
     useState(0);
 
-  // EXAM
-  const [page, setPage] =
-    useState("dashboard");
+  const [editingId, setEditingId] =
+    useState(null);
 
   const [examQuestions, setExamQuestions] =
     useState([]);
@@ -60,15 +73,10 @@ export default function App() {
   const [result, setResult] =
     useState(null);
 
-  // RESULTS
-  const [results, setResults] =
-    useState([]);
+  const [timer, setTimer] =
+    useState(0);
 
-  // USERS
-  const [students, setStudents] =
-    useState([]);
-
-  // AUTH CHECK
+  // AUTH
   useEffect(() => {
 
     const unsubscribe =
@@ -76,17 +84,25 @@ export default function App() {
         auth,
         async (u) => {
 
-          if (u) {
+          try {
 
-            setUser(u);
+            if (u) {
 
-            await loadQuestions();
+              setUser(u);
 
-            await loadUserRole(u.email);
+              await loadRole(u.email);
 
-          } else {
+              await loadQuestions();
 
-            setUser(null);
+            } else {
+
+              setUser(null);
+
+            }
+
+          } catch (error) {
+
+            console.log(error);
 
           }
 
@@ -99,18 +115,61 @@ export default function App() {
 
   }, []);
 
-  // LOAD USER ROLE
-  async function loadUserRole(email) {
+  // TIMER
+  useEffect(() => {
 
-    const snap = await getDocs(
+    let interval;
+
+    if (page === "exam") {
+
+      interval = setInterval(() => {
+
+        setTimer((prev) => prev - 1);
+
+      }, 1000);
+    }
+
+    return () => clearInterval(interval);
+
+  }, [page]);
+
+  useEffect(() => {
+
+    if (timer <= 0 && page === "exam") {
+
+      submitExam();
+
+    }
+
+  }, [timer]);
+
+  // FULLSCREEN ANTI CHEAT
+  async function enableFullscreen() {
+
+    try {
+
+      await document.documentElement
+        .requestFullscreen();
+
+    } catch (e) {
+
+      console.log(e);
+
+    }
+  }
+
+  // LOAD ROLE
+  async function loadRole(userEmail) {
+
+    const snapshot = await getDocs(
       collection(db, "users")
     );
 
-    snap.forEach((doc) => {
+    snapshot.forEach((d) => {
 
-      const data = doc.data();
+      const data = d.data();
 
-      if (data.email === email) {
+      if (data.email === userEmail) {
 
         setRole(data.role || "student");
 
@@ -122,47 +181,26 @@ export default function App() {
   // LOAD QUESTIONS
   async function loadQuestions() {
 
-    try {
+    const snapshot = await getDocs(
+      collection(db, "questions")
+    );
 
-      const snapshot =
-        await getDocs(
-          collection(db, "questions")
-        );
+    const arr = [];
 
-      const arr = [];
+    snapshot.forEach((d) => {
 
-      snapshot.forEach((doc) => {
-
-        arr.push({
-          id: doc.id,
-          ...doc.data(),
-        });
-
+      arr.push({
+        id: d.id,
+        ...d.data(),
       });
 
-      setQuestions(arr);
+    });
 
-    } catch (error) {
-
-      alert(error.message);
-
-    }
+    setQuestions(arr);
   }
 
   // SIGNUP
   async function signup() {
-
-    if (
-      !name ||
-      !email ||
-      !password
-    ) {
-
-      alert("Fill all fields");
-
-      return;
-
-    }
 
     try {
 
@@ -220,17 +258,6 @@ export default function App() {
   // ADD QUESTION
   async function addQuestion() {
 
-    if (
-      !newQuestion ||
-      newOptions.some((o) => !o)
-    ) {
-
-      alert("Fill all question fields");
-
-      return;
-
-    }
-
     try {
 
       await addDoc(
@@ -239,7 +266,6 @@ export default function App() {
           question: newQuestion,
           options: newOptions,
           answer: Number(correctAnswer),
-          subject: "General",
         }
       );
 
@@ -251,10 +277,8 @@ export default function App() {
         "",
         "",
         "",
-        ""
+        "",
       ]);
-
-      setCorrectAnswer(0);
 
       await loadQuestions();
 
@@ -265,38 +289,78 @@ export default function App() {
     }
   }
 
+  // DELETE QUESTION
+  async function deleteQuestion(id) {
+
+    await deleteDoc(
+      doc(db, "questions", id)
+    );
+
+    await loadQuestions();
+  }
+
+  // EDIT QUESTION
+  async function updateQuestion() {
+
+    await updateDoc(
+      doc(db, "questions", editingId),
+      {
+        question: newQuestion,
+        options: newOptions,
+        answer: Number(correctAnswer),
+      }
+    );
+
+    setEditingId(null);
+
+    setNewQuestion("");
+
+    setNewOptions([
+      "",
+      "",
+      "",
+      "",
+    ]);
+
+    await loadQuestions();
+  }
+
   // LOAD RESULTS
   async function loadResults() {
 
-    const snapshot =
-      await getDocs(
-        collection(db, "results")
-      );
+    const snapshot = await getDocs(
+      collection(db, "results")
+    );
 
     const arr = [];
 
-    snapshot.forEach((doc) => {
+    snapshot.forEach((d) => {
 
-      arr.push(doc.data());
+      arr.push(d.data());
 
     });
 
     setResults(arr);
+
+    const sorted = arr.sort(
+      (a, b) => b.score - a.score
+    );
+
+    setLeaderboard(sorted);
   }
 
   // LOAD STUDENTS
   async function loadStudents() {
 
-    const snapshot =
-      await getDocs(
-        collection(db, "users")
-      );
+    const snapshot = await getDocs(
+      collection(db, "users")
+    );
 
     const arr = [];
 
-    snapshot.forEach((doc) => {
+    snapshot.forEach((d) => {
 
-      const data = doc.data();
+      const data = d.data();
 
       if (data.role === "student") {
 
@@ -310,26 +374,19 @@ export default function App() {
   }
 
   // START EXAM
-  function startExam(count) {
+  async function startExam(count) {
 
-    if (questions.length === 0) {
+    await enableFullscreen();
 
-      alert("No questions found");
-
-      return;
-
-    }
-
-    const shuffled =
-      [...questions]
-        .sort(() =>
-          Math.random() - 0.5
-        )
-        .slice(0, count);
+    const shuffled = [...questions]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, count);
 
     setExamQuestions(shuffled);
 
     setAnswers({});
+
+    setTimer(count * 60);
 
     setPage("exam");
   }
@@ -341,9 +398,7 @@ export default function App() {
 
     examQuestions.forEach((q, i) => {
 
-      if (
-        answers[i] === q.answer
-      ) {
+      if (answers[i] === q.answer) {
 
         correct++;
 
@@ -351,17 +406,11 @@ export default function App() {
 
     });
 
-    const score =
-      Math.round(
-        (
-          correct /
-          examQuestions.length
-        ) * 100
-      );
+    const score = Math.round(
+      (correct / examQuestions.length) * 100
+    );
 
     const resultData = {
-
-      userId: user.uid,
 
       email: user.email,
 
@@ -369,11 +418,9 @@ export default function App() {
 
       correct,
 
-      total:
-        examQuestions.length,
+      total: examQuestions.length,
 
-      createdAt:
-        new Date().toISOString(),
+      createdAt: new Date().toISOString(),
 
     };
 
@@ -387,15 +434,46 @@ export default function App() {
     setPage("result");
   }
 
-  // LOADING
+  // EXPORT RESULTS
+  function exportResults() {
+
+    const text = JSON.stringify(
+      results,
+      null,
+      2
+    );
+
+    const blob = new Blob([text], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+
+    a.href = url;
+
+    a.download = "results.json";
+
+    a.click();
+  }
+
+  const bg = darkMode ? "#0f172a" : "#f1f5f9";
+
+  const card = darkMode ? "#1e293b" : "white";
+
+  const text = darkMode ? "white" : "black";
+
   if (loading) {
 
     return (
-
-      <div style={{ padding: 40 }}>
-
-        <h2>Loading...</h2>
-
+      <div style={{
+        background: bg,
+        color: text,
+        minHeight: "100vh",
+        padding: 40,
+      }}>
+        <h1>Loading...</h1>
       </div>
     );
   }
@@ -405,33 +483,22 @@ export default function App() {
 
     return (
 
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          background: "#f1f5f9",
-        }}
-      >
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: bg,
+      }}>
 
-        <div
-          style={{
-            background: "white",
-            padding: 30,
-            borderRadius: 12,
-            width: 350,
-            boxShadow:
-              "0 5px 20px rgba(0,0,0,0.1)",
-          }}
-        >
+        <div style={{
+          background: card,
+          padding: 30,
+          width: 350,
+          borderRadius: 12,
+        }}>
 
-          <h1
-            style={{
-              textAlign: "center",
-              marginBottom: 25,
-            }}
-          >
+          <h1 style={{ color: text }}>
             Odia Exam Portal
           </h1>
 
@@ -443,8 +510,8 @@ export default function App() {
             }
             style={{
               width: "100%",
-              marginBottom: 15,
               padding: 12,
+              marginBottom: 12,
             }}
           />
 
@@ -456,8 +523,8 @@ export default function App() {
             }
             style={{
               width: "100%",
-              marginBottom: 15,
               padding: 12,
+              marginBottom: 12,
             }}
           />
 
@@ -470,22 +537,20 @@ export default function App() {
             }
             style={{
               width: "100%",
-              marginBottom: 15,
               padding: 12,
+              marginBottom: 12,
             }}
           />
 
           <select
             value={selectedRole}
             onChange={(e) =>
-              setSelectedRole(
-                e.target.value
-              )
+              setSelectedRole(e.target.value)
             }
             style={{
               width: "100%",
-              marginBottom: 20,
               padding: 12,
+              marginBottom: 12,
             }}
           >
 
@@ -499,32 +564,13 @@ export default function App() {
 
           </select>
 
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-            }}
-          >
+          <button onClick={signup}>
+            Signup
+          </button>
 
-            <button
-              onClick={signup}
-              style={{
-                flex: 1,
-              }}
-            >
-              Signup
-            </button>
-
-            <button
-              onClick={login}
-              style={{
-                flex: 1,
-              }}
-            >
-              Login
-            </button>
-
-          </div>
+          <button onClick={login}>
+            Login
+          </button>
 
         </div>
 
@@ -537,19 +583,30 @@ export default function App() {
 
     return (
 
-      <div style={{ padding: 30 }}>
+      <div style={{
+        background: bg,
+        color: text,
+        minHeight: "100vh",
+        padding: 20,
+      }}>
 
-        <h1>Mock Exam</h1>
+        <h1>
+          Mock Exam
+        </h1>
+
+        <h2>
+          Timer: {timer}s
+        </h2>
 
         {examQuestions.map((q, i) => (
 
           <div
             key={i}
             style={{
-              background: "white",
+              background: card,
               padding: 20,
-              borderRadius: 10,
               marginBottom: 20,
+              borderRadius: 10,
             }}
           >
 
@@ -565,9 +622,7 @@ export default function App() {
 
                   <input
                     type="radio"
-                    checked={
-                      answers[i] === j
-                    }
+                    checked={answers[i] === j}
                     onChange={() =>
                       setAnswers({
                         ...answers,
@@ -586,9 +641,7 @@ export default function App() {
           </div>
         ))}
 
-        <button
-          onClick={submitExam}
-        >
+        <button onClick={submitExam}>
           Submit Exam
         </button>
 
@@ -601,18 +654,19 @@ export default function App() {
 
     return (
 
-      <div
-        style={{
-          padding: 40,
-          textAlign: "center",
-        }}
-      >
+      <div style={{
+        background: bg,
+        color: text,
+        minHeight: "100vh",
+        padding: 40,
+      }}>
 
-        <h1>Exam Result</h1>
+        <h1>
+          Result
+        </h1>
 
         <h2>
-          Score:
-          {result.score}%
+          Score: {result.score}%
         </h2>
 
         <p>
@@ -627,7 +681,7 @@ export default function App() {
             setPage("dashboard")
           }
         >
-          Back Dashboard
+          Dashboard
         </button>
 
       </div>
@@ -639,26 +693,40 @@ export default function App() {
 
     return (
 
-      <div style={{ padding: 30 }}>
+      <div style={{
+        background: bg,
+        color: text,
+        minHeight: "100vh",
+        padding: 30,
+      }}>
 
-        <h1>Admin Dashboard</h1>
+        <h1>
+          Admin Dashboard
+        </h1>
 
-        <p>
-          Logged in as:
-          {user.email}
-        </p>
+        <button
+          onClick={() =>
+            setDarkMode(!darkMode)
+          }
+        >
+          Toggle Theme
+        </button>
+
+        <button onClick={logout}>
+          Logout
+        </button>
 
         <hr />
 
-        <h2>Add Question</h2>
+        <h2>
+          Add / Edit Question
+        </h2>
 
         <input
           placeholder="Question"
           value={newQuestion}
           onChange={(e) =>
-            setNewQuestion(
-              e.target.value
-            )
+            setNewQuestion(e.target.value)
           }
           style={{
             width: "100%",
@@ -675,11 +743,9 @@ export default function App() {
             value={opt}
             onChange={(e) => {
 
-              const copy =
-                [...newOptions];
+              const copy = [...newOptions];
 
-              copy[i] =
-                e.target.value;
+              copy[i] = e.target.value;
 
               setNewOptions(copy);
 
@@ -695,7 +761,6 @@ export default function App() {
 
         <input
           type="number"
-          placeholder="Correct Answer Index"
           value={correctAnswer}
           onChange={(e) =>
             setCorrectAnswer(
@@ -705,101 +770,106 @@ export default function App() {
           style={{
             width: "100%",
             padding: 10,
-            marginBottom: 15,
+            marginBottom: 10,
           }}
         />
 
-        <button
-          onClick={addQuestion}
-        >
-          Add Question
-        </button>
+        {editingId ? (
+          <button onClick={updateQuestion}>
+            Update Question
+          </button>
+        ) : (
+          <button onClick={addQuestion}>
+            Add Question
+          </button>
+        )}
 
         <hr />
 
         <h2>
-          Total Questions:
-          {questions.length}
+          Questions
         </h2>
 
-        <button
-          onClick={loadResults}
-        >
+        {questions.map((q) => (
+
+          <div
+            key={q.id}
+            style={{
+              background: card,
+              padding: 15,
+              marginBottom: 10,
+              borderRadius: 8,
+            }}
+          >
+
+            <p>
+              {q.question}
+            </p>
+
+            <button
+              onClick={() => {
+
+                setEditingId(q.id);
+
+                setNewQuestion(q.question);
+
+                setNewOptions(q.options);
+
+                setCorrectAnswer(q.answer);
+
+              }}
+            >
+              Edit
+            </button>
+
+            <button
+              onClick={() =>
+                deleteQuestion(q.id)
+              }
+            >
+              Delete
+            </button>
+
+          </div>
+        ))}
+
+        <hr />
+
+        <button onClick={loadResults}>
           Load Results
         </button>
 
-        <button
-          onClick={loadStudents}
-        >
+        <button onClick={loadStudents}>
           View Students
         </button>
 
-        <h2>Results</h2>
+        <button onClick={exportResults}>
+          Export Results
+        </button>
 
-        {results.map((r, i) => (
+        <h2>
+          Leaderboard
+        </h2>
 
-          <div
-            key={i}
-            style={{
-              background: "white",
-              padding: 15,
-              marginBottom: 10,
-              borderRadius: 8,
-            }}
-          >
+        {leaderboard.map((r, i) => (
 
-            <p>
-              Email:
-              {r.email}
-            </p>
-
-            <p>
-              Score:
-              {r.score}%
-            </p>
-
-            <p>
-              Correct:
-              {r.correct}
-              /
-              {r.total}
-            </p>
-
+          <div key={i}>
+            #{i + 1} - {r.email} - {r.score}%
           </div>
+
         ))}
 
-        <h2>Students</h2>
+        <h2>
+          Students
+        </h2>
 
         {students.map((s, i) => (
 
-          <div
-            key={i}
-            style={{
-              background: "white",
-              padding: 15,
-              marginBottom: 10,
-              borderRadius: 8,
-            }}
-          >
-
-            <p>
-              Name:
-              {s.name}
-            </p>
-
-            <p>
-              Email:
-              {s.email}
-            </p>
-
+          <div key={i}>
+            {s.name} - {s.email}
           </div>
+
         ))}
-
-        <br />
-
-        <button onClick={logout}>
-          Logout
-        </button>
 
       </div>
     );
@@ -808,16 +878,32 @@ export default function App() {
   // STUDENT DASHBOARD
   return (
 
-    <div style={{ padding: 40 }}>
+    <div style={{
+      background: bg,
+      color: text,
+      minHeight: "100vh",
+      padding: 40,
+    }}>
 
-      <h1>Student Dashboard</h1>
+      <h1>
+        Student Dashboard
+      </h1>
 
-      <p>
-        Logged in:
-        {user.email}
-      </p>
+      <button
+        onClick={() =>
+          setDarkMode(!darkMode)
+        }
+      >
+        Toggle Theme
+      </button>
 
-      <h3>Select Mock Test</h3>
+      <button onClick={logout}>
+        Logout
+      </button>
+
+      <h3>
+        Select Mock Test
+      </h3>
 
       <button
         onClick={() =>
@@ -849,13 +935,6 @@ export default function App() {
         }
       >
         50 Questions
-      </button>
-
-      <br />
-      <br />
-
-      <button onClick={logout}>
-        Logout
       </button>
 
     </div>
