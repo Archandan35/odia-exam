@@ -3,12 +3,13 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_BUCKET",
-  messagingSenderId: "YOUR_MSG_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyD_RiRoqFccROtU1zgvNXWFAO4rTYDMt24",
+  authDomain: "mock-test-platform-4295d.firebaseapp.com",
+  projectId: "mock-test-platform-4295d",
+  storageBucket: "mock-test-platform-4295d.firebasestorage.app",
+  messagingSenderId: "472963857360",
+  appId: "1:472963857360:web:dde2bcef807d1de828d7d5",
+  measurementId: "G-Y61XJRTYC6"
 };
 
 const app = initializeApp(firebaseConfig);
